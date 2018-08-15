@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//client端，运行在家里有网站的电脑中
+//client端，提供服务，运行在家里有网站的电脑中
 
 var host *string = flag.String("host", "127.0.0.1", "请输入服务器ip")
 var remotePort *string = flag.String("remotePort", "20012", "服务器地址端口")
@@ -27,37 +27,34 @@ type browser struct {
 }
 
 //读取browser过来的数据
-func (self browser) read() {
+func (b browser) read() {
 
 	for {
 		var recv []byte = make([]byte, 10240)
-		n, err := self.conn.Read(recv)
+		n, err := b.conn.Read(recv)
 		if err != nil {
 
-			self.writ <- true
-			self.er <- true
+			b.writ <- true
+			b.er <- true
 			//fmt.Println("读取browser失败", err)
 			break
 		}
-		self.recv <- recv[:n]
-
+		b.recv <- recv[:n]
 	}
 }
 
 //把数据发送给browser
-func (self browser) write() {
+func (b browser) write() {
 
 	for {
 		var send []byte = make([]byte, 10240)
 		select {
-		case send = <-self.send:
-			self.conn.Write(send)
-		case <-self.writ:
+		case send = <-b.send:
+			b.conn.Write(send)
+		case <-b.writ:
 			//fmt.Println("写入browser进程关闭")
 			break
-
 		}
-
 	}
 
 }
@@ -218,7 +215,6 @@ func handle(server *server, next chan bool) {
 		select {
 		case serverrecv = <-server.recv:
 			if serverrecv[0] != '0' {
-
 				browse.send <- serverrecv
 			}
 

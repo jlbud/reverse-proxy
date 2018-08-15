@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"flag"
@@ -10,14 +10,14 @@ import (
 	"time"
 )
 
-//server端，运行在有外网ip的服务器上
+//server端，请求服务，运行在有外网ip的服务器上
 
 var localPort *string = flag.String("localPort", "3002", "user访问地址端口")
 var remotePort *string = flag.String("remotePort", "20012", "与client通讯端口")
 
 //与client相关的conn
 type client struct {
-	conn net.Conn
+	conn net.Conn //远程提供服务的client连接
 	er   chan bool
 	//未收到心跳包通道
 	heart chan bool
@@ -92,7 +92,6 @@ func (self client) write() {
 
 		}
 	}
-
 }
 
 //与user相关的conn
@@ -141,9 +140,9 @@ func (self user) write() {
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU()) //设置任务可以使用的最大cpu核数
 
-	flag.Parse()
+	flag.Parse() //开始解析flag
 	if flag.NFlag() != 2 {
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -160,26 +159,25 @@ func main() {
 	}
 
 	//监听端口
-	c, err := net.Listen("tcp", ":" + *remotePort)
+	r, err := net.Listen("tcp", ":" + *remotePort) //连接远程服务
 	log(err)
-	u, err := net.Listen("tcp", ":" + *localPort)
+	l, err := net.Listen("tcp", ":" + *localPort) //连接本地服务
 	log(err)
 	//第一条tcp关闭或者与浏览器建立tcp都要返回重新监听
 TOP:
 //监听user链接
 	Uconn := make(chan net.Conn)
-	go goaccept(u, Uconn)
-	//一定要先接受client
+	go goaccept(l, Uconn) //连接本地服务，一定要先接受client
 	fmt.Println("准备好连接了")
-	clientconnn := accept(c)
-	fmt.Println("client已连接", clientconnn.LocalAddr().String())
+	rconn := accept(r) //远程服务
+	fmt.Println("client已连接", rconn.LocalAddr().String())
 	recv := make(chan []byte)
 	send := make(chan []byte)
 	heart := make(chan bool, 1)
 	//1个位置是为了防止两个读取线程一个退出后另一个永远卡住
 	er := make(chan bool, 1)
 	writ := make(chan bool)
-	client := &client{clientconnn, er, heart, false, writ, recv, send}
+	client := &client{rconn, er, heart, false, writ, recv, send}
 	go client.read()
 	go client.write()
 
