@@ -2,4 +2,4 @@
 
 - ![](./res/describe.png)
 - achieve a reverse proxy
-- https://gitee.com/wapai/chuantou
+- [引用地址](https://gitee.com/wapai/chuantou)
