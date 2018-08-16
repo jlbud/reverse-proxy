@@ -89,12 +89,11 @@ func (cli client) write() {
 		case <-cli.writ:
 			//fmt.Println("写入client进程关闭")
 			break
-
 		}
 	}
 }
 
-//与user相关的conn
+//与user相关的conn，请求最最开始发起方 localhost:3002
 type user struct {
 	conn net.Conn
 	er   chan bool
@@ -186,7 +185,7 @@ TOP:
 		select {
 		case <-client.heart:
 			goto TOP
-		case userconnn := <-Uconn:
+		case userconnn := <-Uconn: //响应浏览器的请求
 			//暂未使用
 			client.disheart = true
 			recv = make(chan []byte)
@@ -195,8 +194,8 @@ TOP:
 			er = make(chan bool, 1)
 			writ = make(chan bool)
 			user := &user{userconnn, er, writ, recv, send}
-			go user.read()
-			go user.write()
+			go user.read()  //从用户浏览器一直读取
+			go user.write() //给用户浏览器返回数据，后半部分，client 返回-> server 返回-> user browser
 			//当两个socket都创立后进入handle处理
 			go handle(client, user)
 			goto TOP

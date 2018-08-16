@@ -64,7 +64,7 @@ type server struct {
 	conn net.Conn
 	er   chan bool
 	writ chan bool
-	recv chan []byte
+	recv chan []byte //client端接收数据通道
 	send chan []byte
 }
 
@@ -76,11 +76,10 @@ func (ser *server) read() {
 	ser.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
 	for {
 		var recv []byte = make([]byte, 10240)
-		n, err := ser.conn.Read(recv)
+		n, err := ser.conn.Read(recv) //阻塞，读取server发过来的数据
 		if err != nil {
 			if strings.Contains(err.Error(), "timeout") && !isheart {
-				//fmt.Println("发送心跳包")
-				ser.conn.Write([]byte("hh"))
+				ser.conn.Write([]byte("hh")) //发送心跳包
 				//4秒时间收心跳包
 				ser.conn.SetReadDeadline(time.Now().Add(time.Second * 4))
 				isheart = true
@@ -93,33 +92,29 @@ func (ser *server) read() {
 			//fmt.Println("没收到心跳包或者server关闭，关闭此条tcp", err)
 			break
 		}
-		//收到心跳包
+		//如果收到是心跳包
 		if recv[0] == 'h' && recv[1] == 'h' {
 			//fmt.Println("收到心跳包")
-			ser.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
+			ser.conn.SetReadDeadline(time.Now().Add(time.Second * 20)) //20秒后断开连接
 			isheart = false
 			continue
 		}
-		ser.recv <- recv[:n]
+		ser.recv <- recv[:n] //收到了server的通知，然后 handle()进行处理
 	}
 }
 
 //把数据发送给server
 func (ser server) write() {
-
 	for {
 		var send []byte = make([]byte, 10240)
-
 		select {
-		case send = <-ser.send:
+		case send = <-ser.send: //收到响应数据后发送给 server 端
 			ser.conn.Write(send)
 		case <-ser.writ:
 			//fmt.Println("写入server进程关闭")
 			break
 		}
-
 	}
-
 }
 
 func main() {
@@ -150,8 +145,8 @@ func main() {
 		writ := make(chan bool)
 		next := make(chan bool)
 		server := &server{serverconn, er, writ, recv, send}
-		go server.read()
-		go server.write()
+		go server.read()  //for()开始读 server 端的数据
+		go server.write() //for()开始给 server 写入数据
 		go handle(server, next)
 		<-next
 	}
@@ -191,9 +186,8 @@ func dail(hostport string) net.Conn {
 //两个socket衔接相关处理
 func handle(server *server, next chan bool) {
 	var serverrecv = make([]byte, 10240)
-	//阻塞这里等待server传来数据再链接browser
 	fmt.Println("等待server发来消息")
-	serverrecv = <-server.recv
+	serverrecv = <-server.recv //阻塞这里等待server传来数据再链接browser
 	//连接上，下一个tcp连上服务器
 	next <- true
 	//fmt.Println("开始新的tcp链接，发来的消息是：", string(serverrecv))
@@ -204,9 +198,9 @@ func handle(server *server, next chan bool) {
 	er := make(chan bool, 1)
 	writ := make(chan bool)
 	browse := &browser{serverconn, er, writ, recv, send}
-	go browse.read()
-	go browse.write()
-	browse.send <- serverrecv
+	go browse.read()          //for() 阻塞，一直读从 browse 来的数据
+	go browse.write()         //for() 阻塞，一直给 browse 写数据
+	browse.send <- serverrecv //browse 接收请求数据，然后写入 browse.write() 处理
 
 	for {
 		var serverrecv = make([]byte, 10240)
@@ -217,8 +211,8 @@ func handle(server *server, next chan bool) {
 				browse.send <- serverrecv
 			}
 
-		case browserrecv = <-browse.recv:
-			server.send <- browserrecv
+		case browserrecv = <-browse.recv: //browse 返回响应的数据
+			server.send <- browserrecv    //给 server 响应数据
 		case <-server.er:
 			//fmt.Println("server关闭了，关闭server与browse")
 			server.conn.Close()
