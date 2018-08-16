@@ -29,12 +29,12 @@ type client struct {
 }
 
 //读取client过来的数据
-func (self *client) read() {
+func (cli *client) read() {
 	for {
 		//40秒没有数据传输则断开
-		self.conn.SetReadDeadline(time.Now().Add(time.Second * 40))
+		cli.conn.SetReadDeadline(time.Now().Add(time.Second * 40))
 		var recv []byte = make([]byte, 10240)
-		n, err := self.conn.Read(recv)
+		n, err := cli.conn.Read(recv)
 
 		if err != nil {
 			//			if strings.Contains(err.Error(), "timeout") && self.disheart {
@@ -42,17 +42,17 @@ func (self *client) read() {
 			//				self.conn.SetReadDeadline(time.Time{})
 			//				continue
 			//			}
-			self.heart <- true
-			self.er <- true
-			self.writ <- true
+			cli.heart <- true
+			cli.er <- true
+			cli.writ <- true
 			//fmt.Println("长时间未传输信息，或者client已关闭。断开并继续accept新的tcp，", err)
 		}
 		//收到心跳包hh，原样返回回复
 		if recv[0] == 'h' && recv[1] == 'h' {
-			self.conn.Write([]byte("hh"))
+			cli.conn.Write([]byte("hh"))
 			continue
 		}
-		self.recv <- recv[:n]
+		cli.recv <- recv[:n]
 
 	}
 }
@@ -79,14 +79,14 @@ func (self *client) read() {
 //}
 
 //把数据发送给client
-func (self client) write() {
+func (cli client) write() {
 
 	for {
 		var send []byte = make([]byte, 10240)
 		select {
-		case send = <-self.send:
-			self.conn.Write(send)
-		case <-self.writ:
+		case send = <-cli.send:
+			cli.conn.Write(send)
+		case <-cli.writ:
 			//fmt.Println("写入client进程关闭")
 			break
 
@@ -104,33 +104,33 @@ type user struct {
 }
 
 //读取user过来的数据
-func (self user) read() {
-	self.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 800))
+func (u user) read() {
+	u.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 800))
 	for {
 		var recv []byte = make([]byte, 10240)
-		n, err := self.conn.Read(recv)
-		self.conn.SetReadDeadline(time.Time{})
+		n, err := u.conn.Read(recv)
+		u.conn.SetReadDeadline(time.Time{})
 		if err != nil {
 
-			self.er <- true
-			self.writ <- true
+			u.er <- true
+			u.writ <- true
 			//fmt.Println("读取user失败", err)
 
 			break
 		}
-		self.recv <- recv[:n]
+		u.recv <- recv[:n]
 	}
 }
 
 //把数据发送给user
-func (self user) write() {
+func (u user) write() {
 
 	for {
 		var send []byte = make([]byte, 10240)
 		select {
-		case send = <-self.send:
-			self.conn.Write(send)
-		case <-self.writ:
+		case send = <-u.send:
+			u.conn.Write(send)
+		case <-u.writ:
 			//fmt.Println("写入user进程关闭")
 			break
 
@@ -244,28 +244,28 @@ func logClose(err error, conn net.Conn) {
 }
 
 //两个socket衔接相关处理
-func handle(client *client, user *user) {
+func handle(cli *client, user *user) {
 	for {
 		var clientrecv = make([]byte, 10240)
 		var userrecv = make([]byte, 10240)
 		select {
 
-		case clientrecv = <-client.recv:
+		case clientrecv = <-cli.recv:
 			user.send <- clientrecv
 		case userrecv = <-user.recv:
 			//fmt.Println("浏览器发来的消息", string(userrecv))
-			client.send <- userrecv
+			cli.send <- userrecv
 			//user出现错误，关闭两端socket
 		case <-user.er:
 			//fmt.Println("user关闭了，关闭client与user")
-			client.conn.Close()
+			cli.conn.Close()
 			user.conn.Close()
 			runtime.Goexit()
 			//client出现错误，关闭两端socket
-		case <-client.er:
+		case <-cli.er:
 			//fmt.Println("client关闭了，关闭client与user")
 			user.conn.Close()
-			client.conn.Close()
+			cli.conn.Close()
 			runtime.Goexit()
 		}
 	}

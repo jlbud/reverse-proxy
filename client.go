@@ -15,7 +15,7 @@ import (
 
 var host *string = flag.String("host", "127.0.0.1", "请输入服务器ip")
 var remotePort *string = flag.String("remotePort", "20012", "服务器地址端口")
-var localPort *string = flag.String("localPort", "80", "本地端口")
+var localPort *string = flag.String("localPort", "8000", "本地端口")
 
 //与browser相关的conn
 type browser struct {
@@ -69,51 +69,51 @@ type server struct {
 }
 
 //读取server过来的数据
-func (self *server) read() {
+func (ser *server) read() {
 	//isheart与timeout共同判断是不是自己设定的SetReadDeadline
 	var isheart bool = false
 	//20秒发一次心跳包
-	self.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
+	ser.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
 	for {
 		var recv []byte = make([]byte, 10240)
-		n, err := self.conn.Read(recv)
+		n, err := ser.conn.Read(recv)
 		if err != nil {
 			if strings.Contains(err.Error(), "timeout") && !isheart {
 				//fmt.Println("发送心跳包")
-				self.conn.Write([]byte("hh"))
+				ser.conn.Write([]byte("hh"))
 				//4秒时间收心跳包
-				self.conn.SetReadDeadline(time.Now().Add(time.Second * 4))
+				ser.conn.SetReadDeadline(time.Now().Add(time.Second * 4))
 				isheart = true
 				continue
 			}
 			//浏览器有可能连接上不发消息就断开，此时就发一个0，为了与服务器一直有一条tcp通路
-			self.recv <- []byte("0")
-			self.er <- true
-			self.writ <- true
+			ser.recv <- []byte("0")
+			ser.er <- true
+			ser.writ <- true
 			//fmt.Println("没收到心跳包或者server关闭，关闭此条tcp", err)
 			break
 		}
 		//收到心跳包
 		if recv[0] == 'h' && recv[1] == 'h' {
 			//fmt.Println("收到心跳包")
-			self.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
+			ser.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
 			isheart = false
 			continue
 		}
-		self.recv <- recv[:n]
+		ser.recv <- recv[:n]
 	}
 }
 
 //把数据发送给server
-func (self server) write() {
+func (ser server) write() {
 
 	for {
 		var send []byte = make([]byte, 10240)
 
 		select {
-		case send = <-self.send:
-			self.conn.Write(send)
-		case <-self.writ:
+		case send = <-ser.send:
+			ser.conn.Write(send)
+		case <-ser.writ:
 			//fmt.Println("写入server进程关闭")
 			break
 		}
@@ -197,14 +197,13 @@ func handle(server *server, next chan bool) {
 	//连接上，下一个tcp连上服务器
 	next <- true
 	//fmt.Println("开始新的tcp链接，发来的消息是：", string(serverrecv))
-	var browse *browser
-	//server发来数据，链接本地80端口
+	//server发来数据，链接本地8000端口
 	serverconn := dail("127.0.0.1:" + *localPort)
 	recv := make(chan []byte)
 	send := make(chan []byte)
 	er := make(chan bool, 1)
 	writ := make(chan bool)
-	browse = &browser{serverconn, er, writ, recv, send}
+	browse := &browser{serverconn, er, writ, recv, send}
 	go browse.read()
 	go browse.write()
 	browse.send <- serverrecv
