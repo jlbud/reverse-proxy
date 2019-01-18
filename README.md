@@ -1,6 +1,6 @@
 # reverse-proxy
 
-- ![](./res/describe.png)
+![](./res/describe.png)
 - achieve a reverse proxy
 - used the heartbeat mechanism
 
